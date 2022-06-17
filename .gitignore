@@ -1,3 +1,5 @@
 *.env
-**/test.py
-**/todo.txt
+*/test.py
+*/todo.txt
+pyhtoncode\aws_ec2_discord_controller\discord_bot\test.py
+pyhtoncode\aws_ec2_discord_controller\discord_bot\todo.txt
