@@ -127,9 +127,9 @@ def getServerNameFromId():
                 data = {'token': f'{token}'}
                 for name in server_data:
                         server_data[f'{name}'].update(token)
-    return True
+    return server_data
 
-print(server_data)
+print(getServerNameFromId())
             
         
 
