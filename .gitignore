@@ -1,3 +1,2 @@
-panel_api_code\.env
-panel_api_code\test.py
-discord_bot\test.py
+*.env
+*/test.py
