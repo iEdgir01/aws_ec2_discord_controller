@@ -1,4 +1,3 @@
-D:\Nextcloud\Dev\pyhtoncode\aws_ec2_discord_controller\discord_bot\test.py
-D:\Nextcloud\Dev\pyhtoncode\aws_ec2_discord_controller\discord_bot\todo.txt
-D:\Nextcloud\Dev\pyhtoncode\aws_ec2_discord_controller\panel_api_code\.env
-D:\Nextcloud\Dev\pyhtoncode\aws_ec2_discord_controller\panel_api_code\test.py
+panel_api_code/.env
+panel_api_code/test.py
+discord_bot/test.py
