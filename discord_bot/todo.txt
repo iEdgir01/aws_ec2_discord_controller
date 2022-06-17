@@ -1,0 +1,10 @@
+read current game ports and notify once ready
+
+every 2 hours notify with server uptime
+
+start instance and start server with a flag
+ons top is to stop both server and instance
+
+
+read api docs, Need to check how tos tart/ stop servers. Probably need to be in client not app
+
