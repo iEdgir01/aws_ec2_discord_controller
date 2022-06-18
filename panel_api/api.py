@@ -23,7 +23,7 @@ auth = {
 }
 
 #global actions
-server_url = config['get_server_url']
+panel_url = config['get_server_url']
 
 def statusCodeCheck(endpoint, headers):
     response = requests.get(endpoint, headers=headers)
@@ -47,13 +47,7 @@ def serverList(endpoint, headers):
     else:
         return str(response.status_code)
 
-server_list = serverList(server_url, auth)
-
-#if server_list:
-#     print(server_list)                                   #print this line to view as dict
-#    print(json.dumps(server_list, indent=4))             #print this line for json formatting
-#else:
-#    print('Connection Error, Status Code: ' + server_list)
+server_list = serverList(panel_url, auth)
 
 def serverData():
     server_data = {}
@@ -61,74 +55,44 @@ def serverData():
         for server in server_list['data']:
             attributes = server['attributes']
             name = attributes['name']
-            uuid = attributes['uuid']
             identifier = attributes['identifier']
             port = server['attributes']['relationships']['allocations']['data'][0]['attributes']['port']
-            server_data[f'{name}'] = {'identifier': f'{identifier}', 'uuid': f'{uuid}', 'port': f'{port}'}
+            server_data[f'{name}'] = {'identifier': f'{identifier}', 'port': f'{port}'}
         return server_data
     else:
         return []
 
 server_data = serverData()
 
-def generateWsUrl():
+def generateResourcesURL():
     ws_urls = []
     for k, v in server_data.items():
         id = v['identifier']
-        ws_urls.append(f'{server_url}/servers/{id}/websocket')
+        ws_urls.append(f'{panel_url}/servers/{id}/resources')
     return ws_urls
 
-def generateToken(endpoint, headers):
+def getServerStats(endpoint, headers):
     response = requests.request('GET', endpoint, headers=headers)
     if response.status_code == 200:
         return response.json()
     else:
         return str(response.status_code)
-
-print("Token's Generated.")
-print('----------------------')
-
-def tokenData():
-    token_data = []
-    my_data = []
-    for urls in generateWsUrl():
-        token_data.append(generateToken(urls, auth))
-    for dict in token_data:
-        for k, v in dict.items():
-            data = {}
-            url = v['socket']
-            guid = url.split('/')[5]
-            token = v['token']
-            data[f'{guid}'] = token
-            my_data.append(data)
-    return my_data
-
-def find_key(d, value):
-    for k,v in d.items():
-        if isinstance(v, dict):
-            p = find_key(v, value)
-            if p:
-                return k
-        elif v == value:
-            return k
-
-
-def getServerNameFromId():
-    uuid = []
-    for k, v in server_data.items():    
-            uuid.append(v['uuid'])      
-    for dict in tokenData():
-        for k, v in dict.items():
-            if k in uuid:
-                token ={'token': v}
-                x = uuid.index(k)
-                y = uuid[x]
-                name = find_key(server_data, y)
-                data = {'token': f'{token}'}
-                for name in server_data:
-                        server_data[f'{name}'].update(token)
+    
+def serverState():
+    for urls in generateResourcesURL():
+        id = urls.split('/')[6]
+        response = getServerStats(urls, auth)
+        state = response['attributes']['current_state']
+        for k, v in server_data.items():
+            guid = v['identifier']
+            if id == guid:
+                data = {'state': f'{state}'}
+                server_data[f'{k}'].update(data)
     return server_data
 
+server_data = serverState()
+
+print(server_data)    
 # next steps are as follows, may not be in order
 # a) create a websocket call and determine if server is on or off. - update server details with status
 # b) if server on take port and pass it to the bot to work with checking the server state.
@@ -138,8 +102,6 @@ def getServerNameFromId():
 # f) notifications every 2 hours on node uptime
 # g) server uptime & node uptime calculations
 # h) investigate discord bot gui to do these actions without needing to type commands in dc chat.. 
-
-print(getServerNameFromId())
             
         
 
