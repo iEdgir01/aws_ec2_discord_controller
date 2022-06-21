@@ -1,7 +1,7 @@
 import discord, asyncio, os, boto3, socket, traceback
 import subprocess
 import datetime
-from api import *
+from api import serverState
 from os import popen
 from os import path
 from dateutil.parser import *
@@ -82,7 +82,7 @@ def instanceState(instance):
 def getInstanceState(instance):
     aws_state = instance.state
     if (aws_state['Name'] == 'running'):
-        return getPortState(instance.public_ip_address, current_port)
+        return getPortState(instance.public_ip_address, 25565)
     else:
         return aws_state['Name']
 
@@ -91,9 +91,9 @@ def getPortState(ip, port):
     sock.settimeout(3.0)
     ready = sock.connect_ex((ip, port))
     if ready == 0:
-        return f'Server ready at {ip}:{current_port}' 
+        return 'ready at ' + ip 
     else:
-        return 'Please Start a Server'
+        return 'Startup in progress, Please wait.'
 
 def rebootInstance(instance):
     try:
@@ -125,19 +125,8 @@ def totalUptime():
         totalUptime += d    
     return str(totalUptime)
 
-server_data = serverState(generateResourcesURL())
-
 def getRunningPort():
-    for k, v in server_data.items():
-        if v['state'] == 'running':
-            port = v['port']
-            name = k
-            state = v['state']
-            return port
-        else:
-            return int(0000)
-
-current_port = getRunningPort()
     
- 
+    
+
 client.run(os.environ['AWSDISCORDTOKEN'])

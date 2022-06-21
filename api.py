@@ -90,7 +90,15 @@ def serverState(urls):
 
 server_data = serverState(generateResourcesURL())
 
-print(server_data)    
+def getRunningPort():
+    for k, v in server_data.items():
+        if v['state'] == 'running':
+            port = v['port']
+            name = k
+            state = v['state']
+            return port 
+
+print(getRunningPort())    
 # next steps are as follows, may not be in order
 # a) get server status - done
 # b) if server on take port and pass it to the bot to work with checking the server state.
