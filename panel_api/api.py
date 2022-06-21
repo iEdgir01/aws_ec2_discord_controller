@@ -1,9 +1,7 @@
-import os
-import requests
-import json
 from os.path import join, dirname
+import json
+import requests
 from dotenv import dotenv_values
-from requests.structures import CaseInsensitiveDict
 
 #.env configuration
 dotenv_path = join(dirname(__file__), '.env')
@@ -78,10 +76,10 @@ def getServerStats(endpoint, headers):
     else:
         return str(response.status_code)
     
-def serverState():
-    for urls in generateResourcesURL():
-        id = urls.split('/')[6]
-        response = getServerStats(urls, auth)
+def serverState(urls):
+    for url in urls:
+        id = url.split('/')[6]
+        response = getServerStats(url, auth)
         state = response['attributes']['current_state']
         for k, v in server_data.items():
             guid = v['identifier']
@@ -90,29 +88,15 @@ def serverState():
                 server_data[f'{k}'].update(data)
     return server_data
 
-server_data = serverState()
+server_data = serverState(generateResourcesURL())
 
 print(server_data)    
 # next steps are as follows, may not be in order
-# a) create a websocket call and determine if server is on or off. - update server details with status
+# a) get server status - done
 # b) if server on take port and pass it to the bot to work with checking the server state.
 # c) create functionality to post node and server states in discord.
 # d) create flags to handle starting the Instance and the server flagged
 # e) stop function to stop server then the instance
 # f) notifications every 2 hours on node uptime
-# g) server uptime & node uptime calculations
-# h) investigate discord bot gui to do these actions without needing to type commands in dc chat.. 
-            
-        
-
-
-
-
-
-
-
-
-
-
-
-
+# g) server uptime & node uptime calculations - impliment with a database
+# h) investigate discord bot gui to do these actions without needing to type commands in dc chat

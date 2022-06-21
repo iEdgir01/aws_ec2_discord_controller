@@ -1,6 +1,7 @@
 import discord, asyncio, os, boto3, socket, traceback
 import subprocess
 import datetime
+from panel_api import api   
 from os import popen
 from os import path
 from dateutil.parser import *
@@ -123,5 +124,9 @@ def totalUptime():
         d = datetime.timedelta(hours=int(h), minutes=int(m), seconds=int(float(s)))
         totalUptime += d    
     return str(totalUptime)
+
+def getRunningPort():
+    
+    
 
 client.run(os.environ['AWSDISCORDTOKEN'])
