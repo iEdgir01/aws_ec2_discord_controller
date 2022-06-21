@@ -81,17 +81,8 @@ def instanceState(instance):
 
 def getInstanceState(instance):
     aws_state = instance.state
-    if (aws_state['Name'] == 'running'):
-        return getPortState(instance.public_ip_address, current_port)
-    else:
-        return aws_state['Name']
-
-def getPortState(ip, port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(3.0)
-    ready = sock.connect_ex((ip, port))
-    if ready == 0:
-        return f'Server ready at {ip}:{current_port}' 
+    if (aws_state['Name'] == 'running') & (serverState()):
+        return f'Server ready at {instance.public_ip_address}:{current_port}' 
     else:
         return 'Please Start a Server'
 
@@ -125,7 +116,12 @@ def totalUptime():
         totalUptime += d    
     return str(totalUptime)
 
-server_data = serverState(generateResourcesURL())
+def getServerState():
+    for k, v in server_data.items():
+        if v['state'] == 'running':
+            return True
+        else:
+            return False
 
 def getRunningPort():
     for k, v in server_data.items():
@@ -137,7 +133,7 @@ def getRunningPort():
         else:
             return int(0000)
 
-current_port = getRunningPort()
+current_port = int(getRunningPort())
     
  
 client.run(os.environ['AWSDISCORDTOKEN'])
