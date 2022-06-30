@@ -1,49 +1,47 @@
 from os.path import join, dirname
-import json
 import requests
 from dotenv import dotenv_values
 
-#.env configuration
+# .env configuration
 dotenv_path = join(dirname(__file__), '.env')
 config = dotenv_values(dotenv_path)
 
-#api configuration
+# api configuration
 url = config['panel_url']
 api = config['api']
 accept_type = config['accept_type']
 content_type = config['content_type']
 
-#authorisation cofiguration
+# authorisation configuration
 auth = {
     'Authorization': f'Bearer {api}',
     'Accept': accept_type,
-    'content-type': content_type, 
+    'content-type': content_type,
 }
 
-#global actions
+# global actions
 panel_url = config['get_server_url']
 
-def statusCodeCheck(endpoint, headers):
-    response = requests.get(endpoint, headers=headers)
+def status_code_check(endpoint, headers):
     try:
-        if response.status_code == 200:
-            return True
-    except:
-        print(response.status_code)
-        return False
+        response = requests.get(endpoint, headers=headers)
+        return response
+    except requests.exceptions.RequestException as err:
+        return err
 
-if statusCodeCheck(url, auth):
+if status_code_check(url, auth):
     print('Connection Successful.')
-    print('----------------------')
+    print('-------------------------')
 else:
-   print('Connection Error.')
+    print(f'Panel Connection Error: {status_code_check(url, auth)}')
 
-def serverList(endpoint, headers): 
+def serverList(endpoint, headers):
     response = requests.request('GET', endpoint, headers=headers)
     if response.status_code == 200:
         return response.json()
     else:
-        return str(response.status_code)
+        return str(f'Request Exception Found: {requests.status_code}')
+
 
 server_list = serverList(panel_url, auth)
 
@@ -64,9 +62,9 @@ server_data = serverData()
 
 def generateResourcesURL():
     ws_urls = []
-    for k, v in server_data.items():
-        id = v['identifier']
-        ws_urls.append(f'{panel_url}/servers/{id}/resources')
+    for v in server_data.values():
+        guid = v['identifier']
+        ws_urls.append(f'{panel_url}/servers/{guid}/resources')
     return ws_urls
 
 def getServerStats(endpoint, headers):
@@ -74,7 +72,8 @@ def getServerStats(endpoint, headers):
     if response.status_code == 200:
         return response.json()
     else:
-        return str(response.status_code)
+        err = response.json()
+        raise Exception(f"Please check instance state, Error Code: {err['errors'][0]['code']} - {err['errors'][0]['status']}: {err['errors'][0]['detail']}")
     
 def serverState(urls):
     for url in urls:
@@ -92,12 +91,13 @@ server_data = serverState(generateResourcesURL())
 
 print('loaded all server details')
 print('-------------------------')
+print(server_data)
+
 # next steps are as follows, may not be in order
-# a) get server status - done
-# b) if server on take port and pass it to the bot to work with checking the server state.
+# b) if server on take port and pass it to the bot to work with checking the server state. - check for steam ports too 
 # c) create functionality to post node and server states in discord.
 # d) create flags to handle starting the Instance and the server flagged
 # e) stop function to stop server then the instance
 # f) notifications every 2 hours on node uptime
-# g) server uptime & node uptime calculations - impliment with a database
+# g) server uptime & node uptime calculations - build with a database
 # h) investigate discord bot gui to do these actions without needing to type commands in dc chat
