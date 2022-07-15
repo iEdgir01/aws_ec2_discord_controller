@@ -72,9 +72,3 @@ def getServerState(status):
         return server_details(dataframe(server_data))
     else:
         return f"There are no running servers"
-
-if isinstance(server_data, dict):
-    print(getServerState(server_s))
-else:
-    print(server_data)
-    print('please check instance state')

@@ -5,9 +5,9 @@ from functions import *
 
 client = commands.Bot(command_prefix='.')
 ec2 = boto3.resource('ec2')
-guild = client.get_guild()
-memberlist = guild.members
-instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [str(guild.id)]}]))
+guildid = str(466315445905915915)
+memberlist = client.get_guild(guildid).members
+instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [guildid]}]))
 
 async def totaluptime(instance):
     current_date = datetime.datetime.now().strftime('%Y-%m-%d')
@@ -28,14 +28,15 @@ async def on_ready():
     print('Logged in as')
     print(client.user.name)
     print(client.user.id)
-    if (client.user.id in memberlist and len(instances[0]) > 0):
+    if (len(instances[0]) > 0):
+        print('Acting on ' + str(instances[0]) + ' (' + str(len(instances)) + ' matching instances)')
         async with aiosqlite.connect('ec2bot.db') as db:
             async with db.cursor() as cursor:
                 await cursor.execute('CREATE TABLE IF NOT EXISTS uptime (date TEXT, uptime TEXT)')
             await db.commit()
         print('database ready')
     else:
-        print('Attempt to start bot by unrecognised guild ' + str(guild.id))
+        print('Attempt to start bot by unrecognised guild')
     print('------------')
 
 @client.command()
