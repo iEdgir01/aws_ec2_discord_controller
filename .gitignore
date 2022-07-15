@@ -1,5 +1,5 @@
 *.env
-*/test.py
 */todo.txt
 /env
 /__pycache__
+*/ec2bot.db

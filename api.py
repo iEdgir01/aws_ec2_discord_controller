@@ -1,5 +1,6 @@
 from os.path import join, dirname
 import requests
+import sys
 from dotenv import dotenv_values
 
 # .env configuration
@@ -73,31 +74,29 @@ def getServerStats(endpoint, headers):
         return response.json()
     else:
         err = response.json()
+        sys.tracebacklimit=0
         raise Exception(f"Please check instance state, Error Code: {err['errors'][0]['code']} - {err['errors'][0]['status']}: {err['errors'][0]['detail']}")
-    
+
 def serverState(urls):
     for url in urls:
         id = url.split('/')[6]
-        response = getServerStats(url, auth)
+        try:
+            response = getServerStats(url, auth)
+        except Exception as e:
+            return str(e)
         state = response['attributes']['current_state']
         for k, v in server_data.items():
             guid = v['identifier']
             if id == guid:
-                data = {'state': f'{state}'}
-                server_data[f'{k}'].update(data)
+                data = {'state': state}
+                server_data[k].update(data)
     return server_data
-
-server_data = serverState(generateResourcesURL())
 
 print('loaded all server details')
 print('-------------------------')
-print(server_data)
-
 # next steps are as follows, may not be in order
-# b) if server on take port and pass it to the bot to work with checking the server state. - check for steam ports too 
 # c) create functionality to post node and server states in discord.
 # d) create flags to handle starting the Instance and the server flagged
 # e) stop function to stop server then the instance
 # f) notifications every 2 hours on node uptime
-# g) server uptime & node uptime calculations - build with a database
 # h) investigate discord bot gui to do these actions without needing to type commands in dc chat
