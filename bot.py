@@ -13,11 +13,12 @@ async def totalup():
     uptime = []
     async with aiosqlite.connect('ec2bot.db') as db:
         async with db.cursor() as cursor:
-            await cursor.execute('SELECT uptime FROM uptime WHERE date = ?', (current_date))
+            await cursor.execute('SELECT uptime FROM uptime WHERE date = ?', (current_date,))
             uptime = await cursor.fetchall()
+            print(uptime)
     totalUptime = datetime.timedelta()
     for i in uptime:
-        (h, m, s) = i.split(':')
+        (h, m, s) = i[0].split(':')
         d = datetime.timedelta(hours=int(h), minutes=int(m), seconds=int(float(s)))
         totalUptime += d
     return str(totalUptime)
@@ -36,20 +37,28 @@ async def on_ready():
     print('-------------------------')
 
 @client.command()
+async def info(ctx):
+    await ctx.send('commands: .ping, .state, .stop, .start, .uptime, .totaluptime, .servers, .lrs')
+
+@client.command()
 async def ping(ctx):
     await ctx.send(f'Pong! latency: {round(client.latency * 1000)}ms')
 
 @client.command()
 async def start(ctx):
-    await turnOnInstance(instances[0])
-    await ctx.send('Starting EC2 instance...')
+    try:
+        turnOnInstance(instances[0])
+        await ctx.send('Starting EC2 instance...')
+    except Exception as e:
+        print(e)
+        await ctx.send('Error starting EC2 instance...')
 
 @client.command()
 async def stop(ctx):
     if (instanceState(instances[0]) == 'running'):
         if turnOffInstance(instances[0]):
             await ctx.send('Stopping EC2 instance... Session Time: ' + str(up(instances[0])))
-            await turnOffInstance(instances[0])
+            turnOffInstance(instances[0])
             async with aiosqlite.connect('ec2bot.db') as db:
                 async with db.cursor() as cursor:
                     await cursor.execute('INSERT INTO uptime VALUES (?, ?)', (datetime.datetime.now().strftime('%Y-%m-%d'), up(instances[0])))
@@ -58,13 +67,6 @@ async def stop(ctx):
             await ctx.send('AWS Instance stopping failed')
     else:
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
-
-@client.command()
-async def reboot(ctx):
-    if rebootInstance(instances[0]):
-        await ctx.send('Rebooting EC2 instance...')
-    else:
-        await ctx.send('Error rebooting EC2 instance')
 
 @client.command()
 async def state(ctx):
@@ -76,7 +78,8 @@ async def uptime(ctx):
 
 @client.command()
 async def totaluptime(ctx):
-    await ctx.send(f'AWS Instance total uptime is: {str(totalup(instances[0]))}')
+    uptime = await totalup()
+    await ctx.send(f'AWS Instance total uptime is: {str(uptime)}')
 
 @client.command()
 async def lrs(ctx):
@@ -87,7 +90,7 @@ async def lrs(ctx):
         else:
             await ctx.send('There are no running servers')
     else:
-        await ctx.send(server_data)
+        await print(server_data)
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
 @client.command()
@@ -96,11 +99,8 @@ async def servers(ctx):
     if isinstance(server_data, dict):
         await ctx.send(f'```\n{getServerState(server_data)}\n```')
     else:
-        await ctx.send(server_data)
+        await print(server_data)
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
-@client.command()
-async def info(ctx):
-    await ctx.send('commands: .ping, .stop, .start, .state, .reboot, .uptime, .totaluptime', '.lrs')
 
 client.run(os.environ['AWSDISCORDTOKEN'])
