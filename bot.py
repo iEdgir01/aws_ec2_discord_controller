@@ -11,7 +11,7 @@ instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [g
 async def totalup():
     current_date = datetime.datetime.now().strftime('%Y-%m-%d')
     uptime = []
-    async with aiosqlite.connect('ec2bot.db') as db:
+    async with aiosqlite.connect('/home/ec2bot/ec2bot.db') as db:
         async with db.cursor() as cursor:
             await cursor.execute('SELECT uptime FROM uptime WHERE date = ?', (current_date,))
             uptime = await cursor.fetchall()
