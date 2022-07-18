@@ -6,10 +6,9 @@ from functions import *
 client = commands.Bot(command_prefix='.')
 ec2 = boto3.resource('ec2')
 guildid = str(466315445905915915)
-memberlist = client.get_guild(guildid).members
 instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [guildid]}]))
 
-async def totaluptime(instance):
+async def totalup():
     current_date = datetime.datetime.now().strftime('%Y-%m-%d')
     uptime = []
     async with aiosqlite.connect('ec2bot.db') as db:
@@ -28,37 +27,32 @@ async def on_ready():
     print('Logged in as')
     print(client.user.name)
     print(client.user.id)
-    if (len(instances[0]) > 0):
-        print('Acting on ' + str(instances[0]) + ' (' + str(len(instances)) + ' matching instances)')
-        async with aiosqlite.connect('ec2bot.db') as db:
-            async with db.cursor() as cursor:
-                await cursor.execute('CREATE TABLE IF NOT EXISTS uptime (date TEXT, uptime TEXT)')
-            await db.commit()
-        print('database ready')
-    else:
-        print('Attempt to start bot by unrecognised guild')
-    print('------------')
+    print('Acting on ' + str(instances[0]) + ' (' + str(len(instances)) + ' matching instances)')
+    async with aiosqlite.connect('ec2bot.db') as db:
+        async with db.cursor() as cursor:
+            await cursor.execute('CREATE TABLE IF NOT EXISTS uptime (date TEXT, uptime TEXT)')
+        await db.commit()
+    print('database ready')
+    print('-------------------------')
 
 @client.command()
 async def ping(ctx):
-    await ctx.send(f'Pong! latency:{round(client.latency * 1000)}ms')
+    await ctx.send(f'Pong! latency: {round(client.latency * 1000)}ms')
 
 @client.command()
 async def start(ctx):
-    if turnOnInstance(instances[0]):
-        await ctx.send('Starting EC2 instance...')
-    else:
-        await ctx.send('Error starting EC2 instance')
+    await turnOnInstance(instances[0])
+    await ctx.send('Starting EC2 instance...')
 
 @client.command()
 async def stop(ctx):
     if (instanceState(instances[0]) == 'running'):
         if turnOffInstance(instances[0]):
-            await ctx.send('Stopping EC2 instance... Session Time: ' + uptime(instances[0]))
+            await ctx.send('Stopping EC2 instance... Session Time: ' + str(up(instances[0])))
             await turnOffInstance(instances[0])
             async with aiosqlite.connect('ec2bot.db') as db:
                 async with db.cursor() as cursor:
-                    await cursor.execute('INSERT INTO uptime VALUES (?, ?)', (datetime.datetime.now().strftime('%Y-%m-%d'), uptime(instances[0])))
+                    await cursor.execute('INSERT INTO uptime VALUES (?, ?)', (datetime.datetime.now().strftime('%Y-%m-%d'), up(instances[0])))
                     await db.commit()
         else:
             await ctx.send('AWS Instance stopping failed')
@@ -78,14 +72,15 @@ async def state(ctx):
 
 @client.command()
 async def uptime(ctx):
-    await ctx.send(f'AWS Instance uptime is: {uptime(instances[0])}')
+    await ctx.send(f'AWS Instance uptime is: {str(up(instances[0]))}')
 
 @client.command()
 async def totaluptime(ctx):
-    await ctx.send(f'AWS Instance total uptime is: {totaluptime(instances[0])}')
+    await ctx.send(f'AWS Instance total uptime is: {str(totalup(instances[0]))}')
 
 @client.command()
 async def lrs(ctx):
+    server_data = serverState(generateResourcesURL())
     if isinstance(server_data, dict):
         if list_running_servers(server_data):
             await ctx.send(list_running_servers(server_data))
@@ -96,7 +91,8 @@ async def lrs(ctx):
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
 @client.command()
-async def list_servers(ctx):
+async def servers(ctx):
+    server_data = serverState(generateResourcesURL())
     if isinstance(server_data, dict):
         await ctx.send(f'```\n{getServerState(server_data)}\n```')
     else:

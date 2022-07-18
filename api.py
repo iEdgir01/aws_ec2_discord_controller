@@ -9,7 +9,7 @@ config = dotenv_values(dotenv_path)
 
 # api configuration
 url = config['panel_url']
-api = config['api']
+api = config['api'] 
 accept_type = config['accept_type']
 content_type = config['content_type']
 
@@ -43,10 +43,8 @@ def serverList(endpoint, headers):
     else:
         return str(f'Request Exception Found: {requests.status_code}')
 
-
-server_list = serverList(panel_url, auth)
-
 def serverData():
+    server_list = serverList(panel_url, auth)
     server_data = {}
     if server_list:
         for server in server_list['data']:
@@ -59,9 +57,8 @@ def serverData():
     else:
         return []
 
-server_data = serverData()
-
 def generateResourcesURL():
+    server_data = serverData()
     ws_urls = []
     for v in server_data.values():
         guid = v['identifier']
@@ -78,6 +75,7 @@ def getServerStats(endpoint, headers):
         raise Exception(f"Please check instance state, Error Code: {err['errors'][0]['code']} - {err['errors'][0]['status']}: {err['errors'][0]['detail']}")
 
 def serverState(urls):
+    server_data = serverData()
     for url in urls:
         id = url.split('/')[6]
         try:

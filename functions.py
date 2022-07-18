@@ -4,8 +4,6 @@ import datetime
 
 headers = ['Server Name', 'UUID', 'Port', 'State']
 
-server_data = serverState(generateResourcesURL())
-
 #ec2 functions
 def turnOffInstance(instance):
         instance.stop()
@@ -27,7 +25,7 @@ def get_instance_ip(instance):
     public_ip = instance.public_ip_address
     return public_ip
 
-def uptime(instance):
+def up(instance):
     launch_time = instance.launch_time
     current_time = datetime.datetime.now(launch_time.tzinfo)
     launch_time_difference = current_time - launch_time
@@ -54,8 +52,6 @@ def get_server_statuses(data):
     except Exception as e:
         return str(e)
 
-server_s = get_server_statuses(server_data)
-
 def list_running_servers(data):
     running_servers = []
     for k, v in data.items():
@@ -68,6 +64,8 @@ def server_details(dataframe):
     return pretty_data
 
 def getServerState(status):
+    server_data = serverState(generateResourcesURL())
+    status = get_server_statuses(server_data)
     if True in status:
         return server_details(dataframe(server_data))
     else:
