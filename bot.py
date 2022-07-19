@@ -1,6 +1,7 @@
 import os, boto3, datetime
 import discord
 from discord.ext import commands
+import asyncio
 import aiosqlite
 from functions import *
 
@@ -8,6 +9,16 @@ client = commands.Bot(command_prefix='.')
 ec2 = boto3.resource('ec2')
 guildid = str(466315445905915915)
 instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [guildid]}]))
+status = False
+
+async def countdown(num_of_secs): 
+        while num_of_secs > 0:
+            if status == True:
+                    break
+            else:
+                await asyncio.sleep(1)
+                num_of_secs -= 1
+        return True
 
 async def totalup():
     current_date = datetime.datetime.now().strftime('%Y-%m-%d')
@@ -40,6 +51,7 @@ async def on_ready():
 @client.command()
 async def info(ctx):
     async with ctx.typing():
+        server_data = serverState(generateResourcesURL())
         if instanceState(instances[0]) == 'running':
             embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
             embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
@@ -48,7 +60,6 @@ async def info(ctx):
             embed.add_field(name='server status', value = f'```\n{getServerState(server_data)}\n```', inline=False)
             embed.set_footer(text= 'Commands: .info, .ping, .state, .start, .stop, .uptime, .totaluptime, .servers, .lrs')
         else:
-            server_data = serverState(generateResourcesURL())
             embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
             embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
             embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
@@ -62,24 +73,41 @@ async def ping(ctx):
 
 @client.command()
 async def start(ctx):
-    try:
-        turnOnInstance(instances[0])
-        await ctx.send('Starting EC2 instance...')
-    except Exception as e:
-        print(e)
-        await ctx.send('Error starting EC2 instance...')
+    global status
+    if (instanceState(instances[0]) != 'running'):
+        try:
+            turnOnInstance(instances[0])
+            await ctx.send('Starting EC2 instance...')
+            status = False
+            count = 1
+            countdowntime = 3600
+            while countdowntime > 0:
+                await countdown(countdowntime) == True
+                if instanceState(instances[0]) == 'running':
+                    await ctx.send(f'EC2 instance is on and {count}{" hours" if count != 1 else " hour"} has passed.')
+                    count += 1
+                    countdowntime = 3600
+                else:
+                    break
+        except Exception as e:
+            print(e)
+            await ctx.send('Error starting EC2 instance...')
+    else:
+        await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
 @client.command()
 async def stop(ctx):
+    global status
     if (instanceState(instances[0]) == 'running'):
-        if turnOffInstance(instances[0]):
-            await ctx.send('Stopping EC2 instance... Session Time: ' + str(up(instances[0])))
+        try:
             turnOffInstance(instances[0])
+            status = True
+            await ctx.send('Stopping EC2 instance... Session Time: ' + str(up(instances[0])))
             async with aiosqlite.connect('ec2bot.db') as db:
                 async with db.cursor() as cursor:
                     await cursor.execute('INSERT INTO uptime VALUES (?, ?)', (datetime.datetime.now().strftime('%Y-%m-%d'), up(instances[0])))
                     await db.commit()
-        else:
+        except:
             await ctx.send('AWS Instance stopping failed')
     else:
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
@@ -105,6 +133,5 @@ async def lrs(ctx):
     else:
         print(server_data)
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
-
-
+        
 client.run(os.environ['AWSDISCORDTOKEN'])

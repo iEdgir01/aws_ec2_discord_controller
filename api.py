@@ -95,5 +95,4 @@ print('-------------------------')
 # c) create functionality to post node and server states in discord.
 # d) create flags to handle starting the Instance and the server flagged
 # e) stop function to stop server then the instance
-# f) notifications every 2 hours on node uptime
 # h) investigate discord bot gui to do these actions without needing to type commands in dc chat
