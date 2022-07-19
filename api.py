@@ -90,7 +90,6 @@ def serverState(urls):
                 server_data[k].update(data)
     return server_data
 
-print('loaded all server details')
 print('-------------------------')
 # next steps are as follows
 # c) create functionality to post node and server states in discord.
