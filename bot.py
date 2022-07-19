@@ -53,7 +53,7 @@ async def info(ctx):
             embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
             embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
             embed.add_field(name='instance uptime', value = await totalup(), inline=True)
-            embed.set_footer(text= 'Commands: .info, .ping, .start, .stop, .lrs')
+            embed.set_footer(text= 'Commands: .info, .ping, .start, .stop, .state, .lrs')
     await ctx.send( embed=embed)
 
 @client.command()
@@ -83,6 +83,10 @@ async def stop(ctx):
             await ctx.send('AWS Instance stopping failed')
     else:
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
+
+@client.command()
+async def state(ctx):
+    await ctx.send(f'AWS Instance state is: {instanceState(instances[0])}')
 
 @client.command()
 async def totaluptime(ctx):
