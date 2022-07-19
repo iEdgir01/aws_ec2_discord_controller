@@ -40,7 +40,6 @@ async def on_ready():
 @client.command()
 async def info(ctx):
     async with ctx.typing():
-        server_data = serverState(generateResourcesURL())
         if instanceState(instances[0]) == 'running':
             embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
             embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
@@ -49,11 +48,12 @@ async def info(ctx):
             embed.add_field(name='server status', value = f'```\n{getServerState(server_data)}\n```', inline=False)
             embed.set_footer(text= 'Commands: .info, .ping, .state, .start, .stop, .uptime, .totaluptime, .servers, .lrs')
         else:
+            server_data = serverState(generateResourcesURL())
             embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
             embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
             embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
             embed.add_field(name='instance uptime', value = await totalup(), inline=True)
-            embed.set_footer(text= 'Commands: .info, .ping, .state, .start, .stop, .uptime, .totaluptime, .servers, .lrs')
+            embed.set_footer(text= 'Commands: .info, .ping, .start, .stop, .lrs')
     await ctx.send( embed=embed)
 
 @client.command()
@@ -85,37 +85,21 @@ async def stop(ctx):
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
 @client.command()
-async def state(ctx):
-    await ctx.send(f'AWS Instance state is: {instanceState(instances[0])}' )
-
-@client.command()
-async def uptime(ctx):
-    await ctx.send(f'AWS Instance uptime is: {str(up(instances[0]))}')
-
-@client.command()
 async def totaluptime(ctx):
     uptime = await totalup()
     await ctx.send(f'AWS Instance total uptime is: {str(uptime)}')
 
 @client.command()
 async def lrs(ctx):
-    server_data = serverState(generateResourcesURL())
-    if isinstance(server_data, dict):
+    async with ctx.typing():
+        server_data = serverState(generateResourcesURL())
+    if instanceState(instances[0]) == 'running':
         if list_running_servers(server_data):
             await ctx.send(list_running_servers(server_data))
         else:
             await ctx.send('There are no running servers')
     else:
-        await print(server_data)
-        await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
-
-@client.command()
-async def servers(ctx):
-    server_data = serverState(generateResourcesURL())
-    if isinstance(server_data, dict):
-        await ctx.send(f'```\n{getServerState(server_data)}\n```')
-    else:
-        await print(server_data)
+        print(server_data)
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
 
