@@ -1,4 +1,5 @@
 import os, boto3, datetime
+import discord
 from discord.ext import commands
 import aiosqlite
 from functions import *
@@ -38,7 +39,22 @@ async def on_ready():
 
 @client.command()
 async def info(ctx):
-    await ctx.send('commands: .ping, .state, .stop, .start, .uptime, .totaluptime, .servers, .lrs')
+    async with ctx.typing():
+        server_data = serverState(generateResourcesURL())
+        if instanceState(instances[0]) == 'running':
+            embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
+            embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
+            embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
+            embed.add_field(name='instance uptime', value = await totalup(), inline=True)
+            embed.add_field(name='server status', value = f'```\n{getServerState(server_data)}\n```', inline=False)
+            embed.set_footer(text= 'Commands: .info, .ping, .state, .start, .stop, .uptime, .totaluptime, .servers, .lrs')
+        else:
+            embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
+            embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
+            embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
+            embed.add_field(name='instance uptime', value = await totalup(), inline=True)
+            embed.set_footer(text= 'Commands: .info, .ping, .state, .start, .stop, .uptime, .totaluptime, .servers, .lrs')
+    await ctx.send( embed=embed)
 
 @client.command()
 async def ping(ctx):
