@@ -92,7 +92,7 @@ def serverState(urls):
 
 print('loaded all server details')
 print('-------------------------')
-# next steps are as follows, may not be in order
+# next steps are as follows
 # c) create functionality to post node and server states in discord.
 # d) create flags to handle starting the Instance and the server flagged
 # e) stop function to stop server then the instance
