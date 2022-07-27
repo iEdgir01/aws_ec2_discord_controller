@@ -58,7 +58,7 @@ async def info(ctx):
             embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
             embed.add_field(name='instance uptime', value = await totalup(), inline=True)
             embed.add_field(name='server status', value = f'```\n{getServerState(server_data)}\n```', inline=False)
-            embed.set_footer(text= 'Commands: .info, .ping, .state, .start, .stop, .uptime, .totaluptime, .servers, .lrs')
+            embed.set_footer(text= 'Commands: .info, .ping, .start, .stop, .state, .lrs')
         else:
             embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
             embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
