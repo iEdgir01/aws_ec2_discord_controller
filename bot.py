@@ -1,13 +1,20 @@
 import os, boto3, datetime
 import discord
-from discord.ext import commands
 import asyncio
 import aiosqlite
+from discord.ext import commands
+from os.path import join, dirname
+from dotenv import dotenv_values
 from functions import *
 
+# .env configuration
+dotenv_path = join(dirname(__file__), '.env')
+config = dotenv_values(dotenv_path)
+
+#bot configuration
 client = commands.Bot(command_prefix='.')
 ec2 = boto3.resource('ec2')
-guildid = str(466315445905915915)
+guildid = config['guild_id']
 instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [guildid]}]))
 status = False
 
