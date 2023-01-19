@@ -92,7 +92,6 @@ def serverState(urls):
 
 print('-------------------------')
 # next steps are as follows
-# c) create functionality to post node and server states in discord.
 # d) create flags to handle starting the Instance and the server flagged
 # e) stop function to stop server then the instance
 # h) investigate discord bot gui to do these actions without needing to type commands in dc chat
