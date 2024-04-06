@@ -1,0 +1,2 @@
+Discord - EC2 Relations:
+https://drpump.github.io/ec2-discord-bot/
