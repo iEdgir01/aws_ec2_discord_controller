@@ -1,6 +1,42 @@
-*.env
-*/env
-*/todo.txt
-/env
-/__pycache__
-*/ec2bot.db
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Virtual environment
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Database
+*.db
+*.db-journal
+ec2bot.db
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Todo
+todo.txt
+
+# Logs
+*.log

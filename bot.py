@@ -15,7 +15,12 @@ config = dotenv_values(dotenv_path)
 client = commands.Bot(command_prefix='.')
 ec2 = boto3.resource('ec2')
 guildid = config['guild_id']
+db_path = config.get('DB_PATH', '/data/ec2bot.db')
 instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [guildid]}]))
+
+if not instances:
+    raise ValueError(f'No EC2 instances found with guild tag: {guildid}')
+
 status = False
 
 async def countdown(num_of_secs): 
@@ -30,7 +35,7 @@ async def countdown(num_of_secs):
 async def totalup():
     current_date = datetime.datetime.now().strftime('%Y-%m-%d')
     uptime = []
-    async with aiosqlite.connect('/home/ec2bot/ec2bot.db') as db:
+    async with aiosqlite.connect(db_path) as db:
         async with db.cursor() as cursor:
             await cursor.execute('SELECT uptime FROM uptime WHERE date = ?', (current_date,))
             uptime = await cursor.fetchall()
@@ -48,7 +53,7 @@ async def on_ready():
     print(client.user.name)
     print(client.user.id)
     print('Acting on ' + str(instances[0]) + ' (' + str(len(instances)) + ' matching instances)')
-    async with aiosqlite.connect('ec2bot.db') as db:
+    async with aiosqlite.connect(db_path) as db:
         async with db.cursor() as cursor:
             await cursor.execute('CREATE TABLE IF NOT EXISTS uptime (date TEXT, uptime TEXT)')
         await db.commit()
@@ -89,16 +94,16 @@ async def start(ctx):
             count = 1
             countdowntime = 3600
             while countdowntime > 0:
-                await countdown(countdowntime) == True
-                if instanceState(instances[0]) == 'running':
-                    await ctx.send(f'EC2 instance is on and {count}{" hours" if count != 1 else " hour"} has passed.')
-                    count += 1
-                    countdowntime = 3600
-                else:
-                    break
+                if await countdown(countdowntime):
+                    if instanceState(instances[0]) == 'running':
+                        await ctx.send(f'EC2 instance is on and {count}{" hours" if count != 1 else " hour"} has passed.')
+                        count += 1
+                        countdowntime = 3600
+                    else:
+                        break
         except Exception as e:
-            print(e)
-            await ctx.send('Error starting EC2 instance...')
+            print(f'Error starting instance: {e}')
+            await ctx.send(f'Error starting EC2 instance: {str(e)}')
     else:
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
@@ -110,12 +115,13 @@ async def stop(ctx):
             turnOffInstance(instances[0])
             status = True
             await ctx.send('Stopping EC2 instance... Session Time: ' + str(up(instances[0])))
-            async with aiosqlite.connect('ec2bot.db') as db:
+            async with aiosqlite.connect(db_path) as db:
                 async with db.cursor() as cursor:
                     await cursor.execute('INSERT INTO uptime VALUES (?, ?)', (datetime.datetime.now().strftime('%Y-%m-%d'), up(instances[0])))
                     await db.commit()
-        except:
-            await ctx.send('AWS Instance stopping failed')
+        except Exception as e:
+            print(f'Error stopping instance: {e}')
+            await ctx.send(f'AWS Instance stopping failed: {str(e)}')
     else:
         await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 

@@ -41,7 +41,7 @@ def serverList(endpoint, headers):
     if response.status_code == 200:
         return response.json()
     else:
-        return str(f'Request Exception Found: {requests.status_code}')
+        return str(f'Request Exception Found: {response.status_code}')
 
 def serverData():
     server_list = serverList(panel_url, auth)

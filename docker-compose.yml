@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  ec2-discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ec2-discord-controller
+    restart: unless-stopped
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Additional environment variables
+    environment:
+      - DB_PATH=/data/ec2bot.db
+      - PYTHONUNBUFFERED=1
+
+    # Volume mapping for database persistence
+    volumes:
+      - bot-data:/data
+      # Optional: Map AWS credentials from host (if not using IAM roles)
+      # - ~/.aws:/home/botuser/.aws:ro
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Optional: Network configuration
+    # networks:
+    #   - bot-network
+
+# Named volume for data persistence
+volumes:
+  bot-data:
+    driver: local
+
+# Optional: Custom network
+# networks:
+#   bot-network:
+#     driver: bridge
