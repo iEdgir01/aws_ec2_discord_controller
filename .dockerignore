@@ -1,6 +1,8 @@
 # Git
 .git
 .gitignore
+.gitattributes
+github.pat
 
 # Python
 __pycache__
@@ -13,6 +15,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+*.pyc
 
 # Environment variables
 .env
@@ -25,19 +28,19 @@ venv.bak/
 ec2bot.db
 
 # Docker
-Dockerfile
 docker-compose.yml
 docker-compose.override.yml
 .dockerignore
 
 # Documentation
-README.md
+*.md
 LICENSE
 prerequisites.txt
 
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 
@@ -50,3 +53,8 @@ Thumbs.db
 
 # Todo
 todo.txt
+
+# Test files (if any)
+tests/
+test_*.py
+*_test.py

@@ -2,11 +2,13 @@ version: '3.8'
 
 services:
   ec2-discord-bot:
+    image: ec2-discord-bot:latest
     build:
       context: .
       dockerfile: Dockerfile.new
     container_name: ec2-discord-controller
     restart: unless-stopped
+    pull_policy: build
 
     # Use minimal env file to prevent docker-compose from looking for .env
     env_file:
