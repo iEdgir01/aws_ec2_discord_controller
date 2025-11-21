@@ -1,150 +1,391 @@
-import os, boto3, datetime
-import discord
+"""Enhanced EC2 Discord Controller Bot - Main Entry Point
+
+A modernized Discord bot for controlling AWS EC2 instances with:
+- Interactive UI with buttons and menus
+- Cost tracking with AWS Cost Explorer
+- Caching for reduced API calls
+- Structured logging
+- Comprehensive error handling
+"""
+
+import os
+import sys
 import asyncio
-import aiosqlite
-from discord.ext import commands
-from os.path import join, dirname
-from dotenv import dotenv_values
-from functions import *
+import discord
+from discord.ext import commands, tasks
+from pathlib import Path
+from dotenv import load_dotenv
 
-# .env configuration
-dotenv_path = join(dirname(__file__), '.env')
-config = dotenv_values(dotenv_path)
+# Add ec2bot to Python path
+sys.path.insert(0, str(Path(__file__).parent))
 
-#bot configuration
-client = commands.Bot(command_prefix='.')
-ec2 = boto3.resource('ec2')
-guildid = config['guild_id']
-db_path = config.get('DB_PATH', '/data/ec2bot.db')
-instances = list(ec2.instances.filter(Filters=[{'Name':'tag:guild', 'Values': [guildid]}]))
+from ec2bot.utils.logger import setup_logging, log_command
+from ec2bot.database.db import Database
+from ec2bot.services.ec2_service import EC2Service
+from ec2bot.services.cache_service import get_cache
+from ec2bot.ui.views import MainMenuView
 
-if not instances:
-    raise ValueError(f'No EC2 instances found with guild tag: {guildid}')
+# Load environment variables
+load_dotenv()
 
-status = False
+# Configuration
+TOKEN = os.environ.get('AWSDISCORDTOKEN')
+DB_PATH = os.environ.get('DB_PATH', '/data/ec2bot.db')
+AWS_REGION = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+GUILD_ID = os.environ.get('guild_id', '').strip("'\"")
 
-async def countdown(num_of_secs): 
-        while num_of_secs > 0:
-            if status == True:
-                    break
-            else:
-                await asyncio.sleep(1)
-                num_of_secs -= 1
-        return True
+if not TOKEN:
+    print("ERROR: AWSDISCORDTOKEN environment variable not set!")
+    sys.exit(1)
 
-async def totalup():
-    current_date = datetime.datetime.now().strftime('%Y-%m-%d')
-    uptime = []
-    async with aiosqlite.connect(db_path) as db:
-        async with db.cursor() as cursor:
-            await cursor.execute('SELECT uptime FROM uptime WHERE date = ?', (current_date,))
-            uptime = await cursor.fetchall()
-            print(uptime)
-    totalUptime = datetime.timedelta()
-    for i in uptime:
-        (h, m, s) = i[0].split(':')
-        d = datetime.timedelta(hours=int(h), minutes=int(m), seconds=int(float(s)))
-        totalUptime += d
-    return str(totalUptime)
+if not GUILD_ID:
+    print("ERROR: guild_id environment variable not set!")
+    sys.exit(1)
 
-@client.event
+# Initialize logging
+logger = setup_logging(log_file=DB_PATH.replace('.db', '.log'), level="INFO")
+
+# Initialize services
+db = Database(DB_PATH)
+cache = get_cache()
+
+# Bot configuration with proper intents
+intents = discord.Intents.default()
+intents.message_content = True  # Required for message commands
+intents.guilds = True
+
+bot = commands.Bot(
+    command_prefix='.',
+    intents=intents,
+    help_command=None  # We'll create our own
+)
+
+
+@bot.event
 async def on_ready():
-    print('Logged in as')
-    print(client.user.name)
-    print(client.user.id)
-    print('Acting on ' + str(instances[0]) + ' (' + str(len(instances)) + ' matching instances)')
-    async with aiosqlite.connect(db_path) as db:
-        async with db.cursor() as cursor:
-            await cursor.execute('CREATE TABLE IF NOT EXISTS uptime (date TEXT, uptime TEXT)')
-        await db.commit()
-    print('database ready')
-    print('-------------------------')
+    """Called when bot is ready"""
+    logger.info(f"Bot logged in as {bot.user} (ID: {bot.user.id})")
+    logger.info(f"Connected to {len(bot.guilds)} guild(s)")
+    logger.info(f"Monitoring instances with guild tag: {GUILD_ID}")
 
-@client.command()
-async def info(ctx):
-    async with ctx.typing():
-        server_data = serverState(generateResourcesURL())
-        if instanceState(instances[0]) == 'running':
-            embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
-            embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
-            embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
-            embed.add_field(name='instance uptime', value = await totalup(), inline=True)
-            embed.add_field(name='server status', value = f'```\n{getServerState(server_data)}\n```', inline=False)
-            embed.set_footer(text= 'Commands: .info, .ping, .start, .stop, .state, .lrs')
+    # Initialize database
+    try:
+        await db.initialize()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}", exc_info=True)
+
+    # Start background tasks
+    if not cache_cleanup.is_running():
+        cache_cleanup.start()
+        logger.info("Started cache cleanup task")
+
+    if not uptime_tracker.is_running():
+        uptime_tracker.start()
+        logger.info("Started uptime tracker task")
+
+    logger.info("EC2 Discord Bot is ready!")
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Global error handler"""
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    logger.error(f"Command error in {ctx.command}: {error}", exc_info=True)
+
+    await ctx.send(f"❌ Error: {str(error)}", delete_after=10)
+
+
+@tasks.loop(minutes=5)
+async def cache_cleanup():
+    """Periodic cache cleanup task"""
+    try:
+        await cache.cleanup_expired()
+        stats = await cache.get_stats()
+        logger.info(f"Cache cleanup complete. Stats: {stats}")
+    except Exception as e:
+        logger.error(f"Cache cleanup failed: {e}", exc_info=True)
+
+
+@tasks.loop(minutes=10)
+async def uptime_tracker():
+    """Track uptime for running instances"""
+    try:
+        ec2_service = EC2Service(region=AWS_REGION)
+        instances = await ec2_service.get_instances_by_tag('guild', GUILD_ID, use_cache=False)
+
+        for instance in instances:
+            state = await ec2_service.get_instance_state(instance.id, use_cache=False)
+
+            # If instance just started, begin uptime session
+            if state['state'] == 'running':
+                # Check if we have an active session
+                # If not, this might be a restart - we'll handle it in the database
+
+                # Save metadata
+                await db.save_instance_metadata(
+                    instance.id,
+                    state['instance_type'],
+                    AWS_REGION,
+                    state['launch_time'] or '',
+                    state['tags']
+                )
+
+        logger.info(f"Uptime tracker checked {len(instances)} instances")
+
+    except Exception as e:
+        logger.error(f"Uptime tracker failed: {e}", exc_info=True)
+
+
+@bot.command(name='menu')
+async def menu_command(ctx):
+    """Open the main EC2 controller menu"""
+    log_command(logger, "menu", ctx.author.id, guild_id=ctx.guild.id if ctx.guild else None)
+
+    await db.log_command(
+        str(ctx.author.id),
+        ctx.author.name,
+        "menu",
+        success=True
+    )
+
+    await ctx.send("EC2 Controller Main Menu", view=MainMenuView())
+
+
+@bot.command(name='ping')
+async def ping_command(ctx):
+    """Check bot latency"""
+    log_command(logger, "ping", ctx.author.id)
+
+    latency_ms = round(bot.latency * 1000)
+    await ctx.send(f"🏓 Pong! Latency: {latency_ms}ms")
+
+    await db.log_command(
+        str(ctx.author.id),
+        ctx.author.name,
+        "ping",
+        success=True
+    )
+
+
+@bot.command(name='state')
+async def state_command(ctx):
+    """Quick state check for all instances"""
+    log_command(logger, "state", ctx.author.id)
+
+    try:
+        ec2_service = EC2Service(region=AWS_REGION)
+        instances = await ec2_service.get_instances_by_tag('guild', GUILD_ID)
+
+        if not instances:
+            await ctx.send(f"No instances found with guild tag: {GUILD_ID}")
+            return
+
+        response = "**Instance States:**\n"
+        for instance in instances:
+            state = await ec2_service.get_instance_state(instance.id)
+            emoji_map = {
+                'running': '🟢',
+                'stopped': '🔴',
+                'pending': '🟡',
+                'stopping': '🟡'
+            }
+            emoji = emoji_map.get(state['state'], '⚪')
+            response += f"{emoji} `{instance.id}`: **{state['state'].upper()}**\n"
+
+        await ctx.send(response)
+
+        await db.log_command(
+            str(ctx.author.id),
+            ctx.author.name,
+            "state",
+            success=True
+        )
+
+    except Exception as e:
+        logger.error(f"State command failed: {e}", exc_info=True)
+        await ctx.send(f"❌ Error: {str(e)}")
+
+        await db.log_command(
+            str(ctx.author.id),
+            ctx.author.name,
+            "state",
+            success=False,
+            error_message=str(e)
+        )
+
+
+@bot.command(name='start')
+async def start_command(ctx, instance_id: str = None):
+    """Start an EC2 instance"""
+    log_command(logger, "start", ctx.author.id, instance_id=instance_id)
+
+    try:
+        ec2_service = EC2Service(region=AWS_REGION)
+
+        # If no instance specified, get first one
+        if not instance_id:
+            instances = await ec2_service.get_instances_by_tag('guild', GUILD_ID)
+            if not instances:
+                await ctx.send("No instances found!")
+                return
+            instance_id = instances[0].id
+
+        msg = await ctx.send(f"⏳ Starting instance `{instance_id}`...")
+
+        result = await ec2_service.start_instance(instance_id)
+
+        if result['success']:
+            # Start uptime session
+            await db.start_uptime_session(instance_id)
+
+            await msg.edit(content=f"✅ Instance `{instance_id}` is starting!")
+
+            await db.log_command(
+                str(ctx.author.id),
+                ctx.author.name,
+                "start",
+                instance_id=instance_id,
+                success=True
+            )
         else:
-            embed = discord.Embed(title='EC2 Bot Info', description='Server and Instance display', color=0x03fcca)
-            embed.add_field(name='instance status', value = instanceState(instances[0]), inline=False)
-            embed.add_field(name='instance IP', value = get_instance_ip(instances[0]), inline=True)
-            embed.add_field(name='instance uptime', value = await totalup(), inline=True)
-            embed.set_footer(text= 'Commands: .info, .ping, .start, .stop, .state, .lrs')
-    await ctx.send( embed=embed)
+            await msg.edit(content=f"❌ Failed to start instance: {result.get('error', 'Unknown error')}")
 
-@client.command()
-async def ping(ctx):
-    await ctx.send(f'Pong! latency: {round(client.latency * 1000)}ms')
+            await db.log_command(
+                str(ctx.author.id),
+                ctx.author.name,
+                "start",
+                instance_id=instance_id,
+                success=False,
+                error_message=result.get('error')
+            )
 
-@client.command()
-async def start(ctx):
-    global status
-    if (instanceState(instances[0]) != 'running'):
-        try:
-            turnOnInstance(instances[0])
-            await ctx.send('Starting EC2 instance...')
-            status = False
-            count = 1
-            countdowntime = 3600
-            while countdowntime > 0:
-                if await countdown(countdowntime):
-                    if instanceState(instances[0]) == 'running':
-                        await ctx.send(f'EC2 instance is on and {count}{" hours" if count != 1 else " hour"} has passed.')
-                        count += 1
-                        countdowntime = 3600
-                    else:
-                        break
-        except Exception as e:
-            print(f'Error starting instance: {e}')
-            await ctx.send(f'Error starting EC2 instance: {str(e)}')
-    else:
-        await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
+    except Exception as e:
+        logger.error(f"Start command failed: {e}", exc_info=True)
+        await ctx.send(f"❌ Error: {str(e)}")
 
-@client.command()
-async def stop(ctx):
-    global status
-    if (instanceState(instances[0]) == 'running'):
-        try:
-            turnOffInstance(instances[0])
-            status = True
-            await ctx.send('Stopping EC2 instance... Session Time: ' + str(up(instances[0])))
-            async with aiosqlite.connect(db_path) as db:
-                async with db.cursor() as cursor:
-                    await cursor.execute('INSERT INTO uptime VALUES (?, ?)', (datetime.datetime.now().strftime('%Y-%m-%d'), up(instances[0])))
-                    await db.commit()
-        except Exception as e:
-            print(f'Error stopping instance: {e}')
-            await ctx.send(f'AWS Instance stopping failed: {str(e)}')
-    else:
-        await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
 
-@client.command()
-async def state(ctx):
-    await ctx.send(f'AWS Instance state is: {instanceState(instances[0])}')
+@bot.command(name='stop')
+async def stop_command(ctx, instance_id: str = None):
+    """Stop an EC2 instance"""
+    log_command(logger, "stop", ctx.author.id, instance_id=instance_id)
 
-@client.command()
-async def totaluptime(ctx):
-    uptime = await totalup()
-    await ctx.send(f'AWS Instance total uptime is: {str(uptime)}')
+    try:
+        ec2_service = EC2Service(region=AWS_REGION)
 
-@client.command()
-async def lrs(ctx):
-    async with ctx.typing():
-        server_data = serverState(generateResourcesURL())
-    if instanceState(instances[0]) == 'running':
-        if list_running_servers(server_data):
-            await ctx.send(list_running_servers(server_data))
+        # If no instance specified, get first one
+        if not instance_id:
+            instances = await ec2_service.get_instances_by_tag('guild', GUILD_ID)
+            if not instances:
+                await ctx.send("No instances found!")
+                return
+            instance_id = instances[0].id
+
+        msg = await ctx.send(f"⏳ Stopping instance `{instance_id}`...")
+
+        # End uptime session
+        duration = await db.end_uptime_session(instance_id)
+
+        result = await ec2_service.stop_instance(instance_id)
+
+        if result['success']:
+            duration_str = ""
+            if duration:
+                hours = duration // 3600
+                minutes = (duration % 3600) // 60
+                duration_str = f" (Session: {hours}h {minutes}m)"
+
+            await msg.edit(content=f"✅ Instance `{instance_id}` is stopping!{duration_str}")
+
+            await db.log_command(
+                str(ctx.author.id),
+                ctx.author.name,
+                "stop",
+                instance_id=instance_id,
+                success=True
+            )
         else:
-            await ctx.send('There are no running servers')
-    else:
-        print(server_data)
-        await ctx.send('AWS Instance state is: ' + instanceState(instances[0]))
-        
-client.run(os.environ['AWSDISCORDTOKEN'])
+            await msg.edit(content=f"❌ Failed to stop instance: {result.get('error', 'Unknown error')}")
+
+            await db.log_command(
+                str(ctx.author.id),
+                ctx.author.name,
+                "stop",
+                instance_id=instance_id,
+                success=False,
+                error_message=result.get('error')
+            )
+
+    except Exception as e:
+        logger.error(f"Stop command failed: {e}", exc_info=True)
+        await ctx.send(f"❌ Error: {str(e)}")
+
+
+@bot.command(name='help')
+async def help_command(ctx):
+    """Show help information"""
+    embed = discord.Embed(
+        title="EC2 Controller Bot - Help",
+        description="Control your AWS EC2 instances from Discord",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(
+        name="Interactive Menu",
+        value="`.menu` - Open the interactive control panel",
+        inline=False
+    )
+
+    embed.add_field(
+        name="Quick Commands",
+        value=(
+            "`.ping` - Check bot latency\n"
+            "`.state` - View all instance states\n"
+            "`.start [instance-id]` - Start an instance\n"
+            "`.stop [instance-id]` - Stop an instance"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="Features",
+        value=(
+            "✅ Interactive button-based controls\n"
+            "✅ Uptime tracking\n"
+            "✅ Cost estimation\n"
+            "✅ Monthly/weekly reports\n"
+            "✅ Caching for faster responses"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="Use .menu for the full interactive interface")
+
+    await ctx.send(embed=embed)
+
+
+async def main():
+    """Main bot entry point"""
+    try:
+        logger.info("Starting EC2 Discord Bot...")
+        async with bot:
+            await bot.start(TOKEN)
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Bot crashed: {e}", exc_info=True)
+        raise
+    finally:
+        logger.info("Bot shutdown complete")
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nBot stopped by user")
+    except Exception as e:
+        print(f"\nFatal error: {e}")
+        sys.exit(1)

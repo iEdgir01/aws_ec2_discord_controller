@@ -82,7 +82,7 @@ class EC2Service:
             if cached:
                 return cached
 
-        async def fetch_instances():
+        def fetch_instances():
             filters = [{'Name': f'tag:{tag_key}', 'Values': [tag_value]}]
             instances = list(self.ec2_resource.instances.filter(Filters=filters))
             return instances
@@ -111,7 +111,7 @@ class EC2Service:
             if cached:
                 return cached
 
-        async def fetch_state():
+        def fetch_state():
             instance = self.ec2_resource.Instance(instance_id)
             instance.load()  # Refresh state
 
@@ -148,7 +148,7 @@ class EC2Service:
         start_time = time.time()
 
         try:
-            async def do_start():
+            def do_start():
                 instance = self.ec2_resource.Instance(instance_id)
                 response = instance.start()
                 return response
@@ -188,7 +188,7 @@ class EC2Service:
         start_time = time.time()
 
         try:
-            async def do_stop():
+            def do_stop():
                 instance = self.ec2_resource.Instance(instance_id)
                 response = instance.stop()
                 return response
@@ -228,7 +228,7 @@ class EC2Service:
         start_time = time.time()
 
         try:
-            async def do_reboot():
+            def do_reboot():
                 instance = self.ec2_resource.Instance(instance_id)
                 instance.reboot()
                 return True
