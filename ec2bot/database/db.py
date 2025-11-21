@@ -79,6 +79,34 @@ class Database:
                 )
             """)
 
+            # Uptime alert configuration
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS alert_config (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alert_name TEXT NOT NULL,
+                    threshold_hours INTEGER NOT NULL,
+                    reminder_interval_hours INTEGER DEFAULT 0,
+                    enabled BOOLEAN DEFAULT 1,
+                    channel_id TEXT,
+                    created_at TEXT NOT NULL
+                )
+            """)
+
+            # Alert history/log
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS alert_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    instance_id TEXT NOT NULL,
+                    alert_config_id INTEGER NOT NULL,
+                    alert_triggered_at TEXT NOT NULL,
+                    uptime_hours REAL NOT NULL,
+                    notification_sent BOOLEAN DEFAULT 0,
+                    FOREIGN KEY (alert_config_id) REFERENCES alert_config (id)
+                )
+            """)
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_alert_history_instance ON alert_history(instance_id)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_alert_history_triggered ON alert_history(alert_triggered_at)")
+
             await db.commit()
 
     async def start_uptime_session(self, instance_id: str) -> int:
@@ -311,3 +339,155 @@ class Database:
 
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+    async def create_alert_config(self, alert_name: str, threshold_hours: int,
+                                  reminder_interval_hours: int = 0, channel_id: Optional[str] = None) -> int:
+        """Create a new uptime alert configuration
+
+        Args:
+            alert_name: Name of the alert (e.g., "4 Hour Warning")
+            threshold_hours: Number of hours before alert triggers
+            reminder_interval_hours: Hours between reminder alerts (0 = no reminders)
+            channel_id: Discord channel ID for notifications (None = DM)
+
+        Returns:
+            Alert config ID
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            now = datetime.now(timezone.utc).isoformat()
+
+            cursor = await db.execute("""
+                INSERT INTO alert_config (alert_name, threshold_hours, reminder_interval_hours,
+                                         enabled, channel_id, created_at)
+                VALUES (?, ?, ?, 1, ?, ?)
+            """, (alert_name, threshold_hours, reminder_interval_hours, channel_id, now))
+
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_alert_configs(self, enabled_only: bool = True) -> List[Dict[str, Any]]:
+        """Get all alert configurations
+
+        Args:
+            enabled_only: Only return enabled alerts
+
+        Returns:
+            List of alert configs
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+
+            if enabled_only:
+                cursor = await db.execute("""
+                    SELECT * FROM alert_config WHERE enabled = 1 ORDER BY threshold_hours ASC
+                """)
+            else:
+                cursor = await db.execute("""
+                    SELECT * FROM alert_config ORDER BY threshold_hours ASC
+                """)
+
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def update_alert_config(self, alert_id: int, enabled: Optional[bool] = None,
+                                  threshold_hours: Optional[int] = None,
+                                  reminder_interval_hours: Optional[int] = None) -> bool:
+        """Update an alert configuration
+
+        Args:
+            alert_id: Alert config ID
+            enabled: Enable/disable the alert
+            threshold_hours: New threshold
+            reminder_interval_hours: New reminder interval
+
+        Returns:
+            True if updated, False if not found
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            updates = []
+            params = []
+
+            if enabled is not None:
+                updates.append("enabled = ?")
+                params.append(enabled)
+
+            if threshold_hours is not None:
+                updates.append("threshold_hours = ?")
+                params.append(threshold_hours)
+
+            if reminder_interval_hours is not None:
+                updates.append("reminder_interval_hours = ?")
+                params.append(reminder_interval_hours)
+
+            if not updates:
+                return False
+
+            params.append(alert_id)
+            query = f"UPDATE alert_config SET {', '.join(updates)} WHERE id = ?"
+
+            cursor = await db.execute(query, params)
+            await db.commit()
+
+            return cursor.rowcount > 0
+
+    async def delete_alert_config(self, alert_id: int) -> bool:
+        """Delete an alert configuration
+
+        Args:
+            alert_id: Alert config ID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("DELETE FROM alert_config WHERE id = ?", (alert_id,))
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def log_alert(self, instance_id: str, alert_config_id: int, uptime_hours: float,
+                       notification_sent: bool = False) -> int:
+        """Log an alert trigger
+
+        Args:
+            instance_id: EC2 instance ID
+            alert_config_id: Alert config ID that triggered
+            uptime_hours: Current uptime in hours
+            notification_sent: Whether notification was sent
+
+        Returns:
+            Alert history ID
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            now = datetime.now(timezone.utc).isoformat()
+
+            cursor = await db.execute("""
+                INSERT INTO alert_history (instance_id, alert_config_id, alert_triggered_at,
+                                          uptime_hours, notification_sent)
+                VALUES (?, ?, ?, ?, ?)
+            """, (instance_id, alert_config_id, now, uptime_hours, notification_sent))
+
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_last_alert_for_instance(self, instance_id: str, alert_config_id: int) -> Optional[Dict[str, Any]]:
+        """Get the last alert trigger for an instance and alert config
+
+        Args:
+            instance_id: EC2 instance ID
+            alert_config_id: Alert config ID
+
+        Returns:
+            Last alert record or None
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+
+            cursor = await db.execute("""
+                SELECT * FROM alert_history
+                WHERE instance_id = ? AND alert_config_id = ?
+                ORDER BY alert_triggered_at DESC
+                LIMIT 1
+            """, (instance_id, alert_config_id))
+
+            row = await cursor.fetchone()
+            return dict(row) if row else None

@@ -51,6 +51,7 @@ class MainMenuView(View):
         self.add_item(PanelControlButton())
         self.add_item(ViewReportsButton())
         self.add_item(ViewCostsButton())
+        self.add_item(AlertSettingsButton())
         self.add_item(CacheStatsButton())
 
 
@@ -394,16 +395,31 @@ class DailyReportButton(Button):
             )
 
             for instance in instances:
+                # Get completed uptime sessions for today
                 uptime_seconds = await db.get_daily_uptime(instance.id)
+
+                # If instance is currently running, add current session uptime
+                state = await ec2_service.get_instance_state(instance.id, use_cache=False)
+
+                if state['state'] == 'running':
+                    current_uptime = await ec2_service.get_instance_uptime(instance.id)
+                    if current_uptime:
+                        # Add current session time to today's total
+                        uptime_seconds += int(current_uptime.total_seconds())
+
                 hours = uptime_seconds // 3600
                 minutes = (uptime_seconds % 3600) // 60
 
-                state = await ec2_service.get_instance_state(instance.id)
                 emoji = get_instance_state_emoji(state['state'])
+
+                # Add additional context for running instances
+                status_text = f"**State**: {state['state']}"
+                if state['state'] == 'running':
+                    status_text += f" (currently running)"
 
                 embed.add_field(
                     name=f"{emoji} {instance.id}",
-                    value=f"**Uptime**: {hours}h {minutes}m\n**State**: {state['state']}",
+                    value=f"**Uptime**: {hours}h {minutes}m\n{status_text}",
                     inline=False
                 )
 
@@ -505,30 +521,68 @@ class ViewCostsButton(Button):
             cost_service = CostService(region=environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
             now = datetime.now(timezone.utc)
 
-            # Get current month costs
-            monthly_costs = await cost_service.get_monthly_costs(now.year, now.month)
+            # Get current month costs with breakdown
+            breakdown_data = await cost_service.get_cost_breakdown_by_service(now.year, now.month)
             forecast = await cost_service.get_cost_forecast(days=30)
+            recommendations = await cost_service.get_cost_optimization_recommendations(now.year, now.month)
 
             embed = discord.Embed(
                 title="💰 Cost Overview",
+                description=f"**{now.strftime('%B %Y')}** Cost Analysis",
                 color=BotStyles.INFO_COLOR,
                 timestamp=now
             )
 
+            # Total cost
             embed.add_field(
-                name=f"{now.strftime('%B %Y')} (Current Month)",
-                value=f"${monthly_costs['total_cost']:.2f}",
-                inline=True
+                name="Total Monthly Cost",
+                value=f"**${breakdown_data['total_cost']:.2f}**",
+                inline=False
             )
 
-            if 'forecasted_cost' in forecast:
+            # Service breakdown
+            if breakdown_data.get('breakdown'):
+                breakdown_text = ""
+                for service, cost in breakdown_data['breakdown'].items():
+                    percentage = (cost / breakdown_data['total_cost'] * 100) if breakdown_data['total_cost'] > 0 else 0
+                    breakdown_text += f"• **{service}**: ${cost:.2f} ({percentage:.1f}%)\n"
+
                 embed.add_field(
-                    name="30-Day Forecast",
+                    name="📊 Cost Breakdown by Service",
+                    value=breakdown_text or "No breakdown available",
+                    inline=False
+                )
+
+            # Forecast
+            if 'forecasted_cost' in forecast and forecast['forecasted_cost'] > 0:
+                embed.add_field(
+                    name="📈 30-Day Forecast",
                     value=f"${forecast['forecasted_cost']:.2f}",
                     inline=True
                 )
 
-            embed.set_footer(text="Costs from AWS Cost Explorer")
+            # Recommendations
+            if recommendations:
+                rec_text = ""
+                severity_emoji = {
+                    "high": "🔴",
+                    "medium": "🟡",
+                    "low": "🟢",
+                    "info": "ℹ️",
+                    "error": "❌"
+                }
+
+                for rec in recommendations[:3]:  # Show top 3 recommendations
+                    emoji = severity_emoji.get(rec['severity'], "•")
+                    rec_text += f"{emoji} **{rec['title']}**\n{rec['message']}\n\n"
+
+                embed.add_field(
+                    name="💡 Cost Optimization Recommendations",
+                    value=rec_text or "No recommendations at this time",
+                    inline=False
+                )
+
+            embed.set_footer(text="Data from AWS Cost Explorer | Click 'Main Menu' to go back")
 
             await interaction.edit_original_response(embed=embed, view=BackToMenuView())
 
@@ -713,3 +767,236 @@ class ServerDetailsButton(Button):
         except Exception as e:
             embed = create_error_embed("Failed to Load Details", str(e))
             await interaction.edit_original_response(embed=embed, view=BackToMenuView())
+
+
+class AlertSettingsButton(Button):
+    """Button to access uptime alert settings"""
+
+    def __init__(self):
+        super().__init__(label="Alert Settings", style=BotStyles.PRIMARY, emoji="⏰")
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.edit_message(
+                content="Uptime Alert Settings",
+                embed=None,
+                view=AlertSettingsMenuView()
+            )
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+
+class AlertSettingsMenuView(View):
+    """Menu for managing uptime alert settings"""
+
+    def __init__(self):
+        super().__init__(timeout=300)
+        self.add_item(ViewAlertsButton())
+        self.add_item(CreateAlertButton())
+        self.add_item(BackToMenuButton())
+
+
+class ViewAlertsButton(Button):
+    """Show all configured alerts"""
+
+    def __init__(self):
+        super().__init__(label="View Alerts", style=BotStyles.PRIMARY, emoji="📋")
+
+    async def callback(self, interaction: discord.Interaction):
+        from ..database.db import Database
+        from os import environ
+
+        try:
+            await interaction.response.edit_message(
+                embed=create_loading_embed("Loading Alerts", "Fetching alert configurations..."),
+                view=None
+            )
+
+            db = Database(environ.get('DB_PATH', '/data/ec2bot.db'))
+            alerts = await db.get_alert_configs(enabled_only=False)
+
+            embed = discord.Embed(
+                title="⏰ Uptime Alert Configurations",
+                color=BotStyles.INFO_COLOR,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            if not alerts:
+                embed.description = "No alerts configured yet. Use 'Create Alert' to add one."
+            else:
+                for alert in alerts:
+                    status = "✅ Enabled" if alert['enabled'] else "❌ Disabled"
+                    reminder_text = f"\nReminders: Every {alert['reminder_interval_hours']}h" if alert['reminder_interval_hours'] > 0 else ""
+
+                    embed.add_field(
+                        name=f"{alert['alert_name']} (ID: {alert['id']})",
+                        value=f"**Threshold**: {alert['threshold_hours']} hours\n**Status**: {status}{reminder_text}",
+                        inline=False
+                    )
+
+            embed.set_footer(text="Use 'Create Alert' to add new alerts")
+
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())
+
+        except Exception as e:
+            embed = create_error_embed("Failed to Load Alerts", str(e))
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())
+
+
+class CreateAlertButton(Button):
+    """Create predefined alert configurations"""
+
+    def __init__(self):
+        super().__init__(label="Create Alert", style=BotStyles.SUCCESS, emoji="➕")
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.edit_message(
+                content="Select an alert threshold to create:",
+                embed=None,
+                view=CreateAlertSelectView()
+            )
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+
+class CreateAlertSelectView(View):
+    """View for selecting alert threshold"""
+
+    def __init__(self):
+        super().__init__(timeout=300)
+        self.add_item(CreateAlert4HButton())
+        self.add_item(CreateAlert8HButton())
+        self.add_item(CreateAlert24HButton())
+        self.add_item(BackToAlertMenuButton())
+
+
+class BackToAlertMenuButton(Button):
+    """Button to return to alert settings menu"""
+
+    def __init__(self):
+        super().__init__(label="Back", style=BotStyles.SECONDARY)
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.edit_message(
+                content="Uptime Alert Settings",
+                embed=None,
+                view=AlertSettingsMenuView()
+            )
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+
+class CreateAlert4HButton(Button):
+    """Create 4-hour alert"""
+
+    def __init__(self):
+        super().__init__(label="4 Hour Alert", style=BotStyles.PRIMARY)
+
+    async def callback(self, interaction: discord.Interaction):
+        from ..database.db import Database
+        from os import environ
+
+        try:
+            await interaction.response.edit_message(
+                embed=create_loading_embed("Creating Alert", "Setting up 4-hour uptime alert..."),
+                view=None
+            )
+
+            db = Database(environ.get('DB_PATH', '/data/ec2bot.db'))
+            alert_id = await db.create_alert_config(
+                alert_name="4 Hour Uptime Warning",
+                threshold_hours=4,
+                reminder_interval_hours=2
+            )
+
+            embed = create_success_embed(
+                "Alert Created",
+                f"4-hour uptime alert created successfully!\n\n"
+                f"**Alert ID**: {alert_id}\n"
+                f"**Threshold**: 4 hours\n"
+                f"**Reminders**: Every 2 hours"
+            )
+
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())
+
+        except Exception as e:
+            embed = create_error_embed("Failed to Create Alert", str(e))
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())
+
+
+class CreateAlert8HButton(Button):
+    """Create 8-hour alert"""
+
+    def __init__(self):
+        super().__init__(label="8 Hour Alert", style=BotStyles.PRIMARY)
+
+    async def callback(self, interaction: discord.Interaction):
+        from ..database.db import Database
+        from os import environ
+
+        try:
+            await interaction.response.edit_message(
+                embed=create_loading_embed("Creating Alert", "Setting up 8-hour uptime alert..."),
+                view=None
+            )
+
+            db = Database(environ.get('DB_PATH', '/data/ec2bot.db'))
+            alert_id = await db.create_alert_config(
+                alert_name="8 Hour Uptime Warning",
+                threshold_hours=8,
+                reminder_interval_hours=4
+            )
+
+            embed = create_success_embed(
+                "Alert Created",
+                f"8-hour uptime alert created successfully!\n\n"
+                f"**Alert ID**: {alert_id}\n"
+                f"**Threshold**: 8 hours\n"
+                f"**Reminders**: Every 4 hours"
+            )
+
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())
+
+        except Exception as e:
+            embed = create_error_embed("Failed to Create Alert", str(e))
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())
+
+
+class CreateAlert24HButton(Button):
+    """Create 24-hour alert"""
+
+    def __init__(self):
+        super().__init__(label="24 Hour Alert", style=BotStyles.PRIMARY)
+
+    async def callback(self, interaction: discord.Interaction):
+        from ..database.db import Database
+        from os import environ
+
+        try:
+            await interaction.response.edit_message(
+                embed=create_loading_embed("Creating Alert", "Setting up 24-hour uptime alert..."),
+                view=None
+            )
+
+            db = Database(environ.get('DB_PATH', '/data/ec2bot.db'))
+            alert_id = await db.create_alert_config(
+                alert_name="24 Hour Uptime Warning",
+                threshold_hours=24,
+                reminder_interval_hours=6
+            )
+
+            embed = create_success_embed(
+                "Alert Created",
+                f"24-hour uptime alert created successfully!\n\n"
+                f"**Alert ID**: {alert_id}\n"
+                f"**Threshold**: 24 hours\n"
+                f"**Reminders**: Every 6 hours"
+            )
+
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())
+
+        except Exception as e:
+            embed = create_error_embed("Failed to Create Alert", str(e))
+            await interaction.edit_original_response(embed=embed, view=AlertSettingsMenuView())

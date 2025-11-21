@@ -13,7 +13,14 @@
       "Bash(git push:*)",
       "Bash(git reset:*)",
       "Bash(aws ec2 describe-instances:*)",
-      "Bash(echo \"# Run this on your server to find Pterodactyl''s network:\ndocker network ls\n# Then inspect the panel container to see which network it uses:\ndocker inspect <pterodactyl-container-name> | grep -A 5 ''Networks''\")"
+      "Bash(echo \"# Run this on your server to find Pterodactyl''s network:\ndocker network ls\n# Then inspect the panel container to see which network it uses:\ndocker inspect <pterodactyl-container-name> | grep -A 5 ''Networks''\")",
+      "Bash(docker build:*)",
+      "Bash(docker tag:*)",
+      "Bash(docker push:*)",
+      "Bash(docker rmi:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
