@@ -48,6 +48,7 @@ class MainMenuView(View):
     def __init__(self):
         super().__init__(timeout=300)
         self.add_item(InstanceControlButton())
+        self.add_item(PanelControlButton())
         self.add_item(ViewReportsButton())
         self.add_item(ViewCostsButton())
         self.add_item(CacheStatsButton())
@@ -567,3 +568,148 @@ class CacheStatsButton(Button):
         except Exception as e:
             embed = create_error_embed("Error Loading Stats", str(e))
             await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class PanelControlButton(Button):
+    """Button to access Pterodactyl panel controls"""
+
+    def __init__(self):
+        super().__init__(label="Panel Servers", style=BotStyles.PRIMARY, emoji="🎮")
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.edit_message(
+                content="Pterodactyl Panel Controls",
+                embed=None,
+                view=PanelMenuView()
+            )
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+
+class PanelMenuView(View):
+    """Menu for Pterodactyl panel server controls"""
+
+    def __init__(self):
+        super().__init__(timeout=300)
+        self.add_item(ServerStatusButton())
+        self.add_item(RunningServersButton())
+        self.add_item(ServerDetailsButton())
+        self.add_item(BackToMenuButton())
+
+
+class ServerStatusButton(Button):
+    """Show server status overview"""
+
+    def __init__(self):
+        super().__init__(label="Server Status", style=BotStyles.PRIMARY, emoji="📊")
+
+    async def callback(self, interaction: discord.Interaction):
+        from ..services.panel_service import PanelService
+
+        try:
+            await interaction.response.edit_message(
+                embed=create_loading_embed("Loading Status", "Fetching server status from panel..."),
+                view=None
+            )
+
+            panel_service = PanelService()
+            counts = await panel_service.get_server_count()
+
+            embed = discord.Embed(
+                title="🎮 Pterodactyl Panel Status",
+                color=BotStyles.INFO_COLOR,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            embed.add_field(name="Total Servers", value=str(counts['total']), inline=True)
+            embed.add_field(name="Running", value=f"🟢 {counts['running']}", inline=True)
+            embed.add_field(name="Offline", value=f"⚫ {counts['offline']}", inline=True)
+
+            if counts['starting'] > 0:
+                embed.add_field(name="Starting", value=f"🟡 {counts['starting']}", inline=True)
+            if counts['stopping'] > 0:
+                embed.add_field(name="Stopping", value=f"🟠 {counts['stopping']}", inline=True)
+
+            await interaction.edit_original_response(embed=embed, view=PanelMenuView())
+
+        except Exception as e:
+            embed = create_error_embed("Panel Connection Failed", str(e))
+            await interaction.edit_original_response(embed=embed, view=BackToMenuView())
+
+
+class RunningServersButton(Button):
+    """List all running servers"""
+
+    def __init__(self):
+        super().__init__(label="Running Servers", style=BotStyles.SUCCESS, emoji="🟢")
+
+    async def callback(self, interaction: discord.Interaction):
+        from ..services.panel_service import PanelService
+
+        try:
+            await interaction.response.edit_message(
+                embed=create_loading_embed("Loading Servers", "Fetching running servers from panel..."),
+                view=None
+            )
+
+            panel_service = PanelService()
+            running_servers = await panel_service.get_running_servers()
+
+            embed = discord.Embed(
+                title="🟢 Running Servers",
+                color=BotStyles.SUCCESS_COLOR,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            if running_servers:
+                server_list = "\n".join([f"• {name}" for name in running_servers])
+                embed.description = server_list
+                embed.set_footer(text=f"{len(running_servers)} server(s) running")
+            else:
+                embed.description = "No servers are currently running"
+                embed.color = BotStyles.WARNING_COLOR
+
+            await interaction.edit_original_response(embed=embed, view=PanelMenuView())
+
+        except Exception as e:
+            embed = create_error_embed("Failed to List Servers", str(e))
+            await interaction.edit_original_response(embed=embed, view=BackToMenuView())
+
+
+class ServerDetailsButton(Button):
+    """Show detailed server information table"""
+
+    def __init__(self):
+        super().__init__(label="Server Details", style=BotStyles.PRIMARY, emoji="📋")
+
+    async def callback(self, interaction: discord.Interaction):
+        from ..services.panel_service import PanelService
+
+        try:
+            await interaction.response.edit_message(
+                embed=create_loading_embed("Loading Details", "Fetching server details from panel..."),
+                view=None
+            )
+
+            panel_service = PanelService()
+            table = await panel_service.get_server_details_table()
+
+            embed = discord.Embed(
+                title="📋 Server Details",
+                color=BotStyles.INFO_COLOR,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            # Discord embeds have a 4096 character limit for description
+            if len(table) > 4000:
+                embed.description = "Server details table too large to display"
+                embed.add_field(name="Note", value="Use the 'Running Servers' button for a simpler view", inline=False)
+            else:
+                embed.description = f"```\n{table}\n```"
+
+            await interaction.edit_original_response(embed=embed, view=PanelMenuView())
+
+        except Exception as e:
+            embed = create_error_embed("Failed to Load Details", str(e))
+            await interaction.edit_original_response(embed=embed, view=BackToMenuView())

@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY ec2bot/ ./ec2bot/
-COPY bot_new.py .
+COPY bot.py .
 COPY functions.py .
 COPY api.py .
 
@@ -36,5 +36,5 @@ USER botuser
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import os; exit(0 if os.path.exists('/data/ec2bot.db') else 1)"
 
-# Run the new bot
-CMD ["python", "-u", "bot_new.py"]
+# Run the bot
+CMD ["python", "-u", "bot.py"]
