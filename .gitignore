@@ -40,3 +40,6 @@ todo.txt
 
 # Logs
 *.log
+
+#PAT
+github.pat
