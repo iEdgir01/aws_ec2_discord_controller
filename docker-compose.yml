@@ -30,16 +30,15 @@ services:
         max-size: "10m"
         max-file: "3"
 
-    # Optional: Network configuration
-    # networks:
-    #   - bot-network
+    # network configuration
+    networks:
+      - docker-bridge
 
 # Named volume for data persistence
 volumes:
   bot-data:
     driver: local
 
-# Optional: Custom network
-# networks:
-#   bot-network:
-#     driver: bridge
+networks:
+  docker-bridge:
+    external: true
