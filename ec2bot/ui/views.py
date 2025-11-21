@@ -359,7 +359,6 @@ class ReportsMenuView(View):
     def __init__(self):
         super().__init__(timeout=300)
         self.add_item(DailyReportButton())
-        self.add_item(WeeklyReportButton())
         self.add_item(MonthlyReportButton())
         self.add_item(BackToMenuButton())
 
@@ -428,17 +427,6 @@ class DailyReportButton(Button):
         except Exception as e:
             embed = create_error_embed("Report Generation Failed", str(e))
             await interaction.edit_original_response(embed=embed, view=BackToMenuView())
-
-
-class WeeklyReportButton(Button):
-    """Show weekly uptime report"""
-
-    def __init__(self):
-        super().__init__(label="Weekly Report", style=BotStyles.SUCCESS)
-
-    async def callback(self, interaction: discord.Interaction):
-        # Implementation similar to daily but for the past 7 days
-        await interaction.response.send_message("Weekly report coming soon!", ephemeral=True)
 
 
 class MonthlyReportButton(Button):

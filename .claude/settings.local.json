@@ -20,7 +20,8 @@
       "Bash(docker rmi:*)",
       "Bash(git mv:*)",
       "Bash(git rm:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(docker system prune:*)"
     ],
     "deny": [],
     "ask": []
