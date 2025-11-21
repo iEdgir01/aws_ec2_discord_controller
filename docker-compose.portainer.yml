@@ -8,6 +8,10 @@ services:
     container_name: ec2-discord-controller
     restart: unless-stopped
 
+    # Use minimal env file to prevent docker-compose from looking for .env
+    env_file:
+      - .env.portainer
+
     # All environment variables come from Portainer
     environment:
       # Discord Bot Configuration
