@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  ec2-discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.new
+    container_name: ec2-discord-controller
+    restart: unless-stopped
+
+    # All environment variables come from Portainer
+    environment:
+      # Discord Bot Configuration
+      - AWSDISCORDTOKEN=${AWSDISCORDTOKEN}
+
+      # AWS Configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+
+      # Discord Guild Configuration
+      - guild_id=${GUILD_ID}
+
+      # Database Configuration
+      - DB_PATH=/data/ec2bot.db
+      - PYTHONUNBUFFERED=1
+
+      # Optional: Pterodactyl Panel Configuration
+      - api=${PTERODACTYL_API_KEY:-}
+      - accept_type=application/json
+      - content_type=application/json
+      - panel_url=${PTERODACTYL_PANEL_URL:-https://panel.fixetics.co.za}
+      - get_server_url=${PTERODACTYL_API_URL:-https://panel.fixetics.co.za/api/client}
+
+    volumes:
+      - bot-data:/data
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-data:
+    driver: local
