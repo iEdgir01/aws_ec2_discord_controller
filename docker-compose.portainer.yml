@@ -41,6 +41,14 @@ services:
         max-size: "10m"
         max-file: "3"
 
+    # Use Docker bridge network for container-to-container communication
+    networks:
+      - bridge
+
 volumes:
   bot-data:
     driver: local
+
+networks:
+  bridge:
+    external: true  # Use default Docker bridge network
